@@ -60,12 +60,15 @@ def ConfusionMatrix(y_true,y_pred):
     return hist.reshape(n,n)
 
 def WCSS(Clusters):
-    '''Clusters contains the list of centroids of each cluster and the training data append to it'''
     k = len(Clusters)
     distance=0
-    for i in range (1,k):
-        distance+=np.sum(np.square(np.asarray(Clusters[i-1]) - Clusters[k-1][Clusters[k-1][:, -1] == i][:,:-1]))
+    centroids=[[]]*k
+    for i in range(0,k):
+        centroids[i]=np.mean(Clusters[i],axis=0)
+    for i in range(0,k):
+        distance+=np.linalg.norm(np.square(centroids[i]-Clusters[i]))
     return distance
+        
 
 def KNN(X_train, X_test, Y_train):
     num_test=X_test.shape[0]
@@ -234,13 +237,7 @@ def random_forest_prediction(x_test, forest):
     return rf_predictions
 
 def RandomForest(X_train, Y_train, X_test):
-    """
-    :type X_train: numpy.ndarray
-    :type X_test: numpy.ndarray
-    :type Y_train: numpy.ndarray
-
-    :rtype: numpy.ndarray
-    """
+    
     forest = random_forest(x_train, 11, 100)
     print(time.ctime(time.time()))
     rf_predictions = random_forest_prediction(x_test, forest)
@@ -253,7 +250,7 @@ def RandomForest(X_train, Y_train, X_test):
 def PCA(X_train, N):
     M=np.mean(X_train.T, axis=1)
     C= X_train - M
-    V = np.cov(C.T)
+    V = np.cov(C.T) #48x48 matrix
     values, vectors = np.linalg.eig(V)
     values=values.argsort()[::-1][:N]
     vectors = vectors[: ,values]
@@ -270,25 +267,28 @@ def Kmeans(X_train, N):
     centroids_old = np.zeros(centroids.shape)
     centroids_new = np.copy(centroids)
     distance = np.zeros((num_training,N))
-    clusters = np.zeros(num_training)
+    cluster_index = np.zeros(num_training)
     diff = np.linalg.norm(np.square(centroids_old - centroids_new))
     for j in range(iterations):
         for i in range(N):
-            distance[:,i] = np.linalg.norm(X_train-centroids[i],axis=1)
-        clusters = np.argmin(distance, axis = 1)
+            distance[:,i] = np.linalg.norm(X_train-centroids_new[i],axis=1)
+        cluster_index = np.argmin(distance, axis = 1) # Y_pred values for the train data
         centroids_old = np.copy(centroids_new)
         
         for i in range(N):
-            centroids_new[i] = np.mean(X_train[clusters == i], axis = 0)
+            centroids_new[i] = np.mean(X_train[cluster_index == i], axis = 0)
         diff = np.linalg.norm(np.square(centroids_new - centroids_old))
         #print(diff)
         if(diff==0):
             break;
-    #WCSS
-    clus = list(centroids)
-    clus.append(np.append(x_train,clusters.reshape(clusters.shape[0],1), axis = 1))
-    print("WCSS:", WCSS(clus))
-    return centroids_new
+    #X_train=np.append(X_train,cluster_index.reshape(cluster_index.shape[0],1), axis = 1)
+    output=[[]]*N
+    for i in range(N):
+        output[i]=X_train[cluster_index == i][:,:-1]
+    #print(output)
+    WCSS(output)    
+    ''' Calling the WCSS Function '''
+    return output
 
 def SklearnSupervisedLearning(x_train,y_train,x_test):
     '''
@@ -416,12 +416,14 @@ if __name__ == '__main__':
     print("Accuracy for KNN Part-1 with 3 nearest neighbors:" ,round(Accuracy(y_test,KNN(x_train,x_test,y_train)),3)*100,"\n")
     
     # @Kmeans
-    centroids = Kmeans(x_train,11)
-    print("\nCluster Centroids after Kmeans: \n", centroids)
+    clusters = Kmeans(x_train,11)
+    print("\nCluster obtained after Kmeans: \n", clusters)
     
+    # @WCSS
+    print("WCSS for k=11 :",WCSS(clusters))
     #PCA
     print("\nPCA with 5 features: \n", PCA(x_train,5))
-    
+
     # @RandomForest
  
     random_forest_predictions = RandomForest(x_train, y_train, x_test)
@@ -461,4 +463,3 @@ if __name__ == '__main__':
     tuned_parameters = {'criterion': ['gini', 'entropy'], 'splitter': ['best'], 'min_samples_split': [2,3,5,7]}
     modelTuned, DT = gridSearch(x_train, y_train, DecisionTreeClassifier(), tuned_parameters)
     printGridPlot(DT, ['gini', 'entropy'], "DT", 'criterion', 'min_samples_split', ['min_samples_split', 'Accuracy'], 'min_samples_split: [2,3,5,7]')
-    

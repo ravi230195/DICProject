@@ -14,7 +14,8 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import VotingClassifier
 from sklearn.model_selection import GridSearchCV
-from Testing import *
+from collections import Counter
+#from Testing import *
 import time
 
 
@@ -59,19 +60,33 @@ def ConfusionMatrix(y_true,y_pred):
     return hist.reshape(n,n)
 
 def WCSS(Clusters):
-    """
-    :Clusters List[numpy.ndarray]
-    :rtype: float
-    """
+    k = len(Clusters)
+    distance=0
+    centroids=[[]]*k
+    for i in range(0,k):
+        centroids[i]=np.mean(Clusters[i],axis=0)
+    for i in range(0,k):
+        distance+=np.linalg.norm(np.square(centroids[i]-Clusters[i]))
+    return distance
+        
 
 def KNN(X_train, X_test, Y_train):
-    """
-   :type X_train: numpy.ndarray
-   :type X_test: numpy.ndarray
-   :type Y_train: numpy.ndarray
+    num_test=X_test.shape[0]
+    num_train = X_train.shape[0]
+    distance = np.zeros((num_test,num_train))
+    distance = np.sqrt(np.sum(X_test**2, axis=1).reshape(num_test, 1) + np.sum(X_train**2, axis=1) - 2 * X_test.dot(X_train.T))
+    newarr = np.argsort(distance,kind='heapsort',axis=1)  #indexes of the sorted rows 
+    Y_train=np.asarray(Y_train)
+    Y_test = Y_train[np.asarray(newarr)][:,:3]
+    np.asarray(Y_test)
+    count_list=[]
+    for i in range(Y_test.shape[0]):
+        count = Counter(Y_test[i])
+        count.most_common(1)
+        count_list.append(list(count.keys())[0])
+    Y_test = np.asarray(count_list)
+    return Y_test
 
-   :rtype: numpy.ndarray
-   """
 '''
 #@ Random Forest
 '''
@@ -222,13 +237,7 @@ def random_forest_prediction(x_test, forest):
     return rf_predictions
 
 def RandomForest(X_train, Y_train, X_test):
-    """
-    :type X_train: numpy.ndarray
-    :type X_test: numpy.ndarray
-    :type Y_train: numpy.ndarray
-
-    :rtype: numpy.ndarray
-    """
+    
     forest = random_forest(x_train, 11, 100)
     print(time.ctime(time.time()))
     rf_predictions = random_forest_prediction(x_test, forest)
@@ -239,18 +248,47 @@ def RandomForest(X_train, Y_train, X_test):
     return random_forest_predictions.to_numpy()
 
 def PCA(X_train, N):
-    """
-    :type X_train: numpy.ndarray
-    :type N: int
-    :rtype: numpy.ndarray
-    """
+    M=np.mean(X_train.T, axis=1)
+    C= X_train - M
+    V = np.cov(C.T) #48x48 matrix
+    values, vectors = np.linalg.eig(V)
+    values=values.argsort()[::-1][:N]
+    vectors = vectors[: ,values]
+    return vectors
 
 def Kmeans(X_train, N):
-    """
-    :type X_train: numpy.ndarray
-    :type N: int
-    :rtype: List[numpy.ndarray]
-    """
+    num_training=X_train.shape[0]
+    num_features=X_train.shape[1]
+    iterations = 100
+    
+    mean = np.mean(X_train,axis=0)
+    standard_deviation = np.std(X_train,axis=0)
+    centroids= (np.random.randn(N,num_features)*standard_deviation) + mean
+    centroids_old = np.zeros(centroids.shape)
+    centroids_new = np.copy(centroids)
+    distance = np.zeros((num_training,N))
+    cluster_index = np.zeros(num_training)
+    diff = np.linalg.norm(np.square(centroids_old - centroids_new))
+    for j in range(iterations):
+        for i in range(N):
+            distance[:,i] = np.linalg.norm(X_train-centroids_new[i],axis=1)
+        cluster_index = np.argmin(distance, axis = 1) # Y_pred values for the train data
+        centroids_old = np.copy(centroids_new)
+        
+        for i in range(N):
+            centroids_new[i] = np.mean(X_train[cluster_index == i], axis = 0)
+        diff = np.linalg.norm(np.square(centroids_new - centroids_old))
+        #print(diff)
+        if(diff==0):
+            break;
+    #X_train=np.append(X_train,cluster_index.reshape(cluster_index.shape[0],1), axis = 1)
+    output=[[]]*N
+    for i in range(N):
+        output[i]=X_train[cluster_index == i][:,:-1]
+    #print(output)
+    WCSS(output)    
+    ''' Calling the WCSS Function '''
+    return output
 
 def SklearnSupervisedLearning(x_train,y_train,x_test):
     '''
@@ -366,7 +404,7 @@ def printGridPlot(l,parameter, model, basedOn, xpara, axis, onParam):
 
 if __name__ == '__main__':
     # @transform the data
-    data = pd.read_csv(r"/home/ravi/Desktop/DIC/Assignment1/data.csv")
+    data = pd.read_csv(r'C:/Users/akula/Documents/DIC/Assignment1/data.csv')
     x_actual = normalizeData(data.iloc[:, :-1])
     y_actual = data.iloc[:, -1]
 
@@ -374,7 +412,20 @@ if __name__ == '__main__':
     x_train, x_test, y_train, y_test = train_test_split(x_actual, y_actual, test_size=0.20)
 
     # @Part 1
+    # @KNN
+    print("Accuracy for KNN Part-1 with 3 nearest neighbors:" ,round(Accuracy(y_test,KNN(x_train,x_test,y_train)),3)*100,"\n")
+    
+    # @Kmeans
+    clusters = Kmeans(x_train,11)
+    print("\nCluster obtained after Kmeans: \n", clusters)
+    
+    # @WCSS
+    print("WCSS for k=11 :",WCSS(clusters))
+    #PCA
+    print("\nPCA with 5 features: \n", PCA(x_train,5))
+
     # @RandomForest
+ 
     random_forest_predictions = RandomForest(x_train, y_train, x_test)
     print("Accuracy of Random Forest: " + Accuracy(y_test, random_forest_predictions))
 
